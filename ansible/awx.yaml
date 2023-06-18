@@ -1,0 +1,17 @@
+---
+- name: "Deploy AWX on Minikube"
+  hosts: tag_minikube
+  become: true
+
+  vars_prompt:
+    - name: user
+      prompt: "Имя пользователя"
+      private: false
+    - name: password
+      prompt: "Пароль пользователя"
+      private: true
+    - name: forward_port
+      prompt: "Порт для проброса (привилегированные порты пока не работают)"
+      private: false
+  roles:
+    - roles/awx

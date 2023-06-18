@@ -1,0 +1,42 @@
+---
+- name: "Gather package facts"
+  package_facts:
+- name: "Update System"
+  dnf:
+    name: "*"
+    state: latest
+    update_only: yes
+
+- name: "Install Docker repository"
+  get_url:
+    url: https://download.docker.com/linux/centos/docker-ce.repo
+    dest: /etc/yum.repos.d/docker-ce.repo
+- name: "Install all Packages"
+  dnf:
+    name: "{{ package }}"
+    state: present
+  loop:
+    - docker-ce
+    - docker-ce-cli
+    - containerd.io
+    - git
+  loop_control:
+    loop_var: package
+  when: ('docker-ce' not in ansible_facts.packages or 'containerd.io' not in ansible_facts.packages)
+- name: "Start and enable Docker service"
+  service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: "Create {{ user }} and add it to Docker group"
+  user:
+    name: "{{ user }}"
+    password: "{{ password | password_hash('sha256') }}"
+    groups: docker,wheel
+    append: yes
+
+- name: "Import Minikube tasklist"
+  import_tasks: minikube.yaml
+- name: "Import AWX tasklist"
+  import_tasks: awx.yaml

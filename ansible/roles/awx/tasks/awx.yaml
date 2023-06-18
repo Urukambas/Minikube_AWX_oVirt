@@ -1,0 +1,68 @@
+---
+- name: "AWX"
+  block:
+    - name: "Create AWX dir"
+      file:
+        path: "/home/{{ user }}/awx"
+        state: directory
+    - name: "Generate Kustomization manifest"
+      template:
+        src: kustomization.yaml.j2
+        dest: "/home/{{ user }}/awx/kustomization.yaml"
+    - name: "Apply Kustomization manifest"
+      shell: "minikube kubectl -- apply -k /home/{{ user }}/awx/."
+    - name: "Check pods status"
+      shell: "minikube kubectl -- get pods -n awx"
+      register: pods_status_check
+      until: (pods_status_check.stdout_lines[1].split()[1] == '2/2')
+      retries: 10
+      delay: 10
+
+    - name: "Generate AWX-server manifest"
+      template:
+        src: awx-server.yaml.j2
+        dest: "/home/{{ user }}/awx/awx-server.yaml"
+    - name: "Regenerate Kustomization manifest"
+      template:
+        src: kustomization.yaml.j2
+        dest: "/home/{{ user }}/awx/kustomization.yaml"
+      vars:
+        awx_server: true
+    - name: "Apply AWX-server manifest"
+      shell: "minikube kubectl -- apply -k /home/{{ user }}/awx/."
+    - name: "Wait for services"
+      pause:
+        minutes: 1
+    - name: "Check AWX Kubernetes services"
+      shell: minikube kubectl -- get svc -n awx
+      register: awx_svc
+    - name: "Determine the nodeport used by the AWX service"
+      set_fact:
+        awx_node_port: "{{ awx_svc.stdout_lines[3].split()[4].split(':')[1].replace('/TCP', '') }}"
+    - name: "Wait for AWX to deploy"
+      uri:
+        url: "http://192.168.49.2:{{ awx_node_port }}"
+      register: awx_status
+      until: (awx_status.status == 200)
+      retries: 20
+      delay: 30
+      no_log: true
+
+    - name: "Start port-forwarding"
+      shell: "nohup minikube kubectl -- port-forward service/awx-server-service --address 0.0.0.0 {{ forward_port }}:80 -n awx > /dev/null 2>&1 &"
+    - name: "Get admin password"
+      shell: "minikube kubectl -- get secret awx-server-admin-password -n awx -o jsonpath='{.data.password}' | base64 --decode ; echo"
+      register: admin_pass
+  become_user: "{{ user }}"
+
+- name: "Add port to Firewalld"
+  firewalld:
+    port: "{{ forward_port }}/tcp"
+    state: enabled
+    permanent: true
+- name: "Restart Firewalld service"
+  service:
+    state: restarted
+    name: firewalld
+- debug:
+    msg: "user is 'admin', password is {{ admin_pass.stdout_lines }} and URL is http://{{ ansible_host }}:{{ forward_port }}"

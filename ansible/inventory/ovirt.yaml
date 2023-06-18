@@ -1,0 +1,12 @@
+plugin: ovirt.ovirt.ovirt
+ovirt_url: "https://ovirt.engine.local/ovirt-engine/api"
+ovirt_insecure: true
+ovirt_username: admin@internal
+ovirt_password: admin
+ovirt_query_filter:
+  search: "name=*"
+keyed_groups:
+  - key: tags
+    prefix: tag
+compose:
+  ansible_host: devices["enp1s0"][0]
